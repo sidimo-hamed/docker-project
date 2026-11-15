@@ -1,0 +1,77 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Test</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Simple Dashboard</h1>
+        <p>Pour la vérification des microservices</p>
+    </header>
+
+    <main>
+        <section>
+            <div class="section-title">
+                <h2>Microservices</h2>
+                <button id="refreshBtn">Actualiser</button>
+            </div>
+
+            <p id="healthMessage">Vérification des services</p>
+            <div id="serviceGrid" class="service-grid"></div>
+
+            <div class="summary">
+                <span>Services : <strong id="serviceCount">6</strong></span>
+                <span>Actifs : <strong id="upCount">—</strong></span>
+                <span>État : <strong id="overallStatus">En attente</strong></span>
+            </div>
+        </section>
+
+        <section>
+            <div class="section-title">
+                <h2>Commandes</h2>
+                <button id="loadOrdersBtn">Afficher les commandes</button>
+            </div>
+            <pre id="ordersOutput">Aucune commande chargée</pre>
+        </section>
+
+        <section>
+            <h2>Tester une commande</h2>
+            <p class="help">Remplis les champs puis lance le traitement</p>
+
+            <form id="checkoutForm">
+                <label for="customerId">ID du client</label>
+                <input type="number" id="customerId" value="1" min="1" required>
+
+                <label for="productId">ID du produit</label>
+                <input type="number" id="productId" value="6" min="1" required>
+
+                <label for="quantity">Quantité</label>
+                <input type="number" id="quantity" value="1" min="1" required>
+
+                <button type="submit">Créer la commande</button>
+            </form>
+
+            <pre id="checkoutOutput">Le résultat apparaîtra ici.</pre>
+        </section>
+
+        <section>
+            <h2>Clients et produits</h2>
+
+            <div class="actions">
+                <button id="loadCustomersBtn">Afficher les clients</button>
+                <button id="loadProductsBtn">Afficher les produits</button>
+            </div>
+
+            <pre id="dataOutput">Sélectionne une option</pre>
+        </section>
+    </main>
+
+    
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

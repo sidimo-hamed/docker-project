@@ -1,0 +1,104 @@
+services:
+
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: apiGateway
+    ports:
+      - "8080:80"
+    volumes:
+      - ./gateway/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - microServices
+    depends_on:
+      - order-service
+      - customer-service
+      - inventory-service
+
+
+  dashboard:
+    build: ./dashboard
+    container_name: dashboard
+    ports:
+      - "8081:8080"
+    environment:
+      ORDER_URL: "http://order-service:5000"
+      INVENTORY_URL: "http://inventory-service:5001"
+      CUSTOMER_URL: "http://customer-service:5002"
+      PAYMENT_URL: "http://payment-service:5003"
+      SHIPPING_URL: "http://shipping-service:5004"
+      NOTIFICATION_URL: "http://notification-service:5005"
+    networks:
+      - microServices
+
+
+  order-service:
+    build: ./orderService
+    image: serviceorder:latest
+    container_name: orderService
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: "postgresql+psycopg://sidimed:p%40ssword@postgresBD:5432/orders_db"
+      CUSTOMER_URL: "http://customer-service:5002"
+      INVENTORY_URL: "http://inventory-service:5001"
+      PAYMENT_URL: "http://payment-service:5003"
+      SHIPPING_URL: "http://shipping-service:5004"
+      NOTIFICATION_URL: "http://notification-service:5005"
+    networks:
+      - microServices
+
+  inventory-service:
+    image: serviceinventory:latest
+    container_name: inventoryService
+    ports:
+      - "5001:5001"
+    environment:
+      DATABASE_URL: "postgresql+psycopg://sidimed:p%40ssword@postgresBD:5432/inventory_db"
+    networks:
+      - microServices
+
+  customer-service:
+    image: servicecustomer:latest
+    container_name: customerService
+    ports:
+      - "5002:5002"
+    environment:
+      DATABASE_URL: "postgresql+psycopg://sidimed:p%40ssword@postgresBD:5432/customers_db"
+    networks:
+      - microServices
+
+  payment-service:
+    build: ./paymentService
+    container_name: paymentService
+    ports:
+      - "5003:5003"
+    networks:
+      - microServices
+
+  shipping-service:
+    build: ./shippingService
+    container_name: shippingService
+    ports:
+      - "5004:5004"
+    networks:
+      - microServices
+
+  notification-service:
+    build: ./notificationService
+    container_name: notificationService
+    ports:
+      - "5005:5005"
+    networks:
+      - microServices
+
+  auth-service:
+    build: ./authService
+    container_name: authService
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+    networks:
+      - microServices
+
+networks:
+  microServices:
+    external: true
