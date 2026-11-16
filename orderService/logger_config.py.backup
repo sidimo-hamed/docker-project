@@ -1,0 +1,35 @@
+import logging
+from contextvars import ContextVar
+from pythonjsonlogger import jsonlogger
+
+# Store the correlation ID of the current request
+_correlation_id = ContextVar("correlation_id", default="-")
+
+
+def set_correlation_id(value):
+    _correlation_id.set(value or "-")
+
+
+class CorrelationIdFilter(logging.Filter):
+
+    def filter(self, record):
+        record.correlation_id = _correlation_id.get()
+        return True
+
+
+# Configure JSON logs
+logger = logging.getLogger("order-service")
+logger.setLevel(logging.INFO)
+logger.propagate = False
+
+if not logger.handlers:
+
+    handler = logging.StreamHandler()
+    handler.addFilter(CorrelationIdFilter())
+
+    formatter = jsonlogger.JsonFormatter(
+        "%(asctime)s %(levelname)s %(name)s %(message)s %(correlation_id)s"
+    )
+
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)

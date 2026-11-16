@@ -133,6 +133,24 @@ def verify():
 
     return response
 
+import uuid
+from flask import request, g
+
+@app.before_request
+def set_correlation_id():
+    correlation_id = request.headers.get("X-Correlation-ID")
+
+    if not correlation_id:
+        correlation_id = str(uuid.uuid4())
+
+    g.correlation_id = correlation_id
+
+
+@app.after_request
+def add_correlation_header(response):
+    response.headers["X-Correlation-ID"] = g.correlation_id
+    return response
+
 # if admin == "admin" :
 
 

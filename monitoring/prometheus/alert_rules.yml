@@ -1,0 +1,49 @@
+
+groups:
+  - name: microservices_alerts
+    rules:
+
+      # Alerte si un microservice devient indisponible
+      - alert: MicroserviceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Microservice indisponible"
+          description: "Le service {{ $labels.job }} ne répond plus."
+
+      # Alerte si le taux d'erreurs HTTP 5xx dépasse 5 %
+      - alert: HighHttpErrorRate
+        expr: |
+          (
+            sum by (job) (
+              rate(http_requests_total{status=~"5.."}[5m])
+            )
+            /
+            sum by (job) (
+              rate(http_requests_total[5m])
+            )
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Taux élevé d'erreurs HTTP"
+          description: "Le service {{ $labels.job }} dépasse 5 % d'erreurs HTTP 5xx."
+
+      # Alerte si le temps de réponse P95 dépasse une seconde
+      - alert: HighResponseTime
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (job, le) (
+              rate(http_request_duration_seconds_bucket[5m])
+            )
+          ) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Temps de réponse élevé"
+          description: "Le P95 du service {{ $labels.job }} dépasse une seconde."

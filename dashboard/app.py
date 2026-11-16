@@ -135,7 +135,23 @@ def checkout():
         return jsonify({"error": "Envoyez un objet JSON valide."}), 400
 
     return call_service("order", "/checkout", method="POST", json=data)
+import uuid
+from flask import request, g
 
+@app.before_request
+def set_correlation_id():
+    correlation_id = request.headers.get("X-Correlation-ID")
+
+    if not correlation_id:
+        correlation_id = str(uuid.uuid4())
+
+    g.correlation_id = correlation_id
+
+
+@app.after_request
+def add_correlation_header(response):
+    response.headers["X-Correlation-ID"] = g.correlation_id
+    return response
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080, debug=False)

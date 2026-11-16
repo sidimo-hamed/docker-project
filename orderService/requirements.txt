@@ -1,5 +1,7 @@
 Flask
 Flask-SQLAlchemy
+Flask-Limiter
 psycopg[binary]
 requests
-Flask-Limiter
+prometheus-client
+python-json-logger
