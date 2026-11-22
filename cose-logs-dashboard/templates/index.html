@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>COSE — Logs Monitoring</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#121c2e;--line:#26354c;--muted:#9aabc2;--text:#e8eef8;--blue:#397cf6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,Segoe UI,Arial}
+header{padding:22px 28px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:12px}
+h1{margin:0;font-size:22px}.muted{color:var(--muted)}main{max-width:1500px;margin:auto;padding:22px}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+.card,.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px}.card{padding:16px}.card span{color:var(--muted)}.num{font-size:28px;font-weight:700;margin-top:5px}
+.filters{display:grid;grid-template-columns:1.3fr 1fr 1fr 1.4fr auto auto;gap:9px;padding:14px;margin-bottom:16px}
+input,select,button{min-width:0;padding:10px;border:1px solid var(--line);border-radius:8px;background:#0d1728;color:var(--text);font:inherit}
+button{background:var(--blue);border-color:var(--blue);cursor:pointer;font-weight:600}.secondary{background:#1b2a42;border-color:var(--line)}
+.toolbar{padding:13px 15px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;color:var(--muted)}
+.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:900px}th,td{padding:11px 13px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--muted);background:#101a2b}
+.msg{max-width:390px;overflow-wrap:anywhere}.pill{padding:3px 8px;border-radius:20px;font-weight:700;font-size:12px;background:#26354c}
+.INFO{color:#6ee7a8;background:#12372f}.WARN{color:#ffd166;background:#493914}.ERROR{color:#ff8585;background:#481f2b}.DEBUG{color:#9fc4ff;background:#1b3151}
+.link{background:none;border:0;color:#8eb6ff;padding:0}.empty,.err{text-align:center;padding:25px;color:var(--muted)}
+dialog{width:min(850px,94vw);max-height:85vh;background:#101a2b;color:var(--text);border:1px solid var(--line);border-radius:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:850px){.cards{grid-template-columns:repeat(2,1fr)}.filters{grid-template-columns:1fr 1fr}}@media(max-width:520px){.filters{grid-template-columns:1fr}main{padding:12px}}
+</style></head>
+<body>
+<header><div><h1>Logs Pour Monitoring</h1></div><div class="muted" id="connection">Connexion…</div></header>
+<main>
+<section class="cards">
+<div class="card"><span>Documents chargés (1000 derniers)</span><div class="num" id="total">—</div></div>
+<div class="card"><span>Services détectés</span><div class="num" id="services">—</div></div>
+<div class="card"><span>Logs ERROR</span><div class="num" id="errors">—</div></div>
+<div class="card"><span>Logs WARN</span><div class="num" id="warns">—</div></div>
+</section>
+<section class="panel filters">
+<input id="q" placeholder="Recherche texte / événement">
+<select id="service"><option value="">Tous les services</option><option>order-service</option><option>inventory-service</option><option>customer-service</option><option>payment-service</option><option>shipping-service</option><option>notification-service</option></select>
+<select id="level"><option value="">Tous les niveaux</option><option>INFO</option><option>WARN</option><option>ERROR</option><option>DEBUG</option></select>
+<input id="cid" placeholder="Correlation ID"><button id="search">Rechercher</button><button class="secondary" id="reset">Réinitialiser</button>
+</section>
+<section class="panel"><div class="toolbar"><span id="count">Chargement…</span><label><input type="checkbox" id="auto" checked style="min-width:auto"> Actualiser toutes les 15 s</label></div>
+<div class="tablewrap"><table><thead><tr><th>Date</th><th>Service</th><th>Niveau</th><th>Événement</th><th>Message</th><th>Correlation ID</th><th>JSON</th></tr></thead><tbody id="rows"><tr><td colspan="7" class="empty">Chargement…</td></tr></tbody></table></div><div class="err" id="err" hidden></div></section>
+</main><dialog id="dlg"><h3>Détail du log JSON</h3><pre id="json"></pre><button class="secondary" id="close">Fermer</button></dialog>
+<script>
+const $=id=>document.getElementById(id);let timer;
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=v=>{if(!v)return "—";let d=new Date(v);return isNaN(d)?esc(v):d.toLocaleString()};
+async function stats(){try{let r=await fetch('/api/stats'),d=await r.json();if(!r.ok)throw Error(d.error);$('total').textContent=d.loaded_documents;$('services').textContent=d.services;$('errors').textContent=d.levels.ERROR||0;$('warns').textContent=d.levels.WARN||0;$('connection').textContent='Elasticsearch connecté'}catch(e){$('connection').textContent='Elasticsearch indisponible'}}
+async function logs(){let p=new URLSearchParams({q:$('q').value,service:$('service').value,level:$('level').value,correlation_id:$('cid').value,limit:100});$('err').hidden=true;try{let r=await fetch('/api/logs?'+p),d=await r.json();if(!r.ok)throw Error(d.error);$('count').textContent=d.total+' résultat(s) — '+d.logs.length+' affiché(s)';window.docs=d.logs;$('rows').innerHTML=d.logs.length?d.logs.map((x,i)=>`<tr><td>${fmt(x.timestamp)}</td><td>${esc(x.service)}</td><td><span class="pill ${esc(String(x.level).toUpperCase())}">${esc(x.level)}</span></td><td>${esc(x.event)}</td><td class="msg">${esc(x.message)}</td><td>${esc(x.correlation_id)}</td><td><button class="link" data-i="${i}">Voir JSON</button></td></tr>`).join(''):'<tr><td colspan="7" class="empty">Aucun log trouvé.</td></tr>';document.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{$('json').textContent=JSON.stringify(window.docs[+b.dataset.i].raw,null,2);$('dlg').showModal()})}catch(e){$('rows').innerHTML='<tr><td colspan="7" class="empty">Chargement impossible</td></tr>';$('err').hidden=false;$('err').textContent=e.message}}
+function refresh(){stats();logs()}$('search').onclick=logs;$('reset').onclick=()=>{['q','cid'].forEach(x=>$(x).value='');$('service').value='';$('level').value='';refresh()};$('close').onclick=()=>$('dlg').close();$('auto').onchange=()=>{clearInterval(timer);if($('auto').checked)timer=setInterval(refresh,15000)};['q','cid'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter')logs()}));refresh();timer=setInterval(refresh,15000);
+</script></body></html>

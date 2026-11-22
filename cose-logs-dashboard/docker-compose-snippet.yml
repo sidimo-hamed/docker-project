@@ -1,0 +1,12 @@
+# À ajouter au docker-compose.yml existant sous services:
+  logs-dashboard:
+    build: ./cose-logs-dashboard
+    container_name: logsDashboard
+    ports:
+      - "8082:5000"
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_INDEX: microservices-logs-*
+    restart: unless-stopped
+    networks:
+      - microServices
