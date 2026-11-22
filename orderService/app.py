@@ -66,6 +66,61 @@ ORDERS_FAILED = Counter(
     "orders_failed_total",
     "Total failed order operations"
 )
+# ==============================
+# RESILIENCE METRICS
+# ==============================
+
+DOWNSTREAM_RETRIES = Counter(
+    "downstream_retries_total",
+    "Total retry attempts for downstream services",
+    ["service"]
+)
+
+DOWNSTREAM_TIMEOUTS = Counter(
+    "downstream_timeouts_total",
+    "Total downstream request timeouts",
+    ["service"]
+)
+
+CIRCUIT_BREAKER_STATE = Gauge(
+    "circuit_breaker_state",
+    "Circuit breaker state: 0=CLOSED, 0.5=HALF-OPEN, 1=OPEN",
+    ["service"]
+)
+
+CIRCUIT_BREAKER_OPEN = Counter(
+    "circuit_breaker_open_total",
+    "Total transitions of circuit breakers to OPEN",
+    ["service"]
+)
+
+CIRCUIT_BREAKER_REJECTED = Counter(
+    "circuit_breaker_rejected_total",
+    "Total requests rejected by open circuit breakers",
+    ["service"]
+)
+
+FALLBACK_TOTAL = Counter(
+    "fallback_total",
+    "Total fallback operations used",
+    ["service"]
+)
+
+# Initialize resilience metrics with zero values
+
+for service in [
+    "customer-service",
+    "inventory-service",
+    "payment-service",
+    "shipping-service",
+    "notification-service"
+]:
+    DOWNSTREAM_RETRIES.labels(service=service).inc(0)
+    DOWNSTREAM_TIMEOUTS.labels(service=service).inc(0)
+
+CIRCUIT_BREAKER_OPEN.labels(service="payment-service").inc(0)
+CIRCUIT_BREAKER_REJECTED.labels(service="payment-service").inc(0)
+FALLBACK_TOTAL.labels(service="customer-service").inc(0)
 
 
 # ==============================
@@ -158,7 +213,31 @@ notification_queue = deque()
 # RETRY WITH EXPONENTIAL BACKOFF
 # ==============================
 
+def get_downstream_service(url):
+
+    services = [
+        ("customer-service", CUSTOMER_URL),
+        ("inventory-service", INVENTORY_URL),
+        ("payment-service", PAYMENT_URL),
+        ("shipping-service", SHIPPING_URL),
+        ("notification-service", NOTIFICATION_URL)
+    ]
+
+    for service_name, base_url in services:
+        if url.startswith(base_url):
+            return service_name
+
+    return "unknown"
+
+
+
+# ==============================
+# RETRY WITH EXPONENTIAL BACKOFF
+# ==============================
+
 def request_with_retry(method, url, **kwargs):
+
+    service_name = get_downstream_service(url)
 
     headers = dict(kwargs.pop("headers", {}) or {})
 
@@ -191,11 +270,26 @@ def request_with_retry(method, url, **kwargs):
             if status < 500 or attempt == 3:
                 raise
 
-        except (requests.ConnectionError, requests.Timeout):
+        except requests.Timeout:
+
+            DOWNSTREAM_TIMEOUTS.labels(
+                service=service_name
+            ).inc()
 
             if attempt == 3:
                 raise
 
+        except requests.ConnectionError:
+
+            if attempt == 3:
+                raise
+
+        # Count retry attempt
+        DOWNSTREAM_RETRIES.labels(
+            service=service_name
+        ).inc()
+
+        # Exponential backoff
         delay = 2 ** attempt
 
         delay = random.uniform(
@@ -207,6 +301,7 @@ def request_with_retry(method, url, **kwargs):
             "Downstream request retry",
             extra={
                 "event": "downstream_request_retry",
+                "service": service_name,
                 "attempt": attempt + 1,
                 "url": url
             }
@@ -225,21 +320,50 @@ class CircuitBreaker:
         self,
         failure_threshold=0.50,
         minimum_requests=10,
-        reset_timeout=30
+        reset_timeout=30,
+        service_name="payment-service"
     ):
 
         self.failure_threshold = failure_threshold
         self.minimum_requests = minimum_requests
         self.reset_timeout = reset_timeout
+        self.service_name = service_name
 
         self.state = "CLOSED"
-
         self.results = deque(maxlen=100)
 
         self.opened_at = None
         self.half_open_test_running = False
 
         self.lock = Lock()
+
+        # Initial Prometheus state
+        CIRCUIT_BREAKER_STATE.labels(
+            service=self.service_name
+        ).set(0)
+
+    def update_state(self, new_state):
+
+        previous_state = self.state
+
+        self.state = new_state
+
+        state_values = {
+            "CLOSED": 0,
+            "HALF-OPEN": 0.5,
+            "OPEN": 1
+        }
+
+        CIRCUIT_BREAKER_STATE.labels(
+            service=self.service_name
+        ).set(state_values[new_state])
+
+        # Count transitions to OPEN
+        if new_state == "OPEN" and previous_state != "OPEN":
+
+            CIRCUIT_BREAKER_OPEN.labels(
+                service=self.service_name
+            ).inc()
 
     def call(self, function, *args, **kwargs):
 
@@ -248,14 +372,24 @@ class CircuitBreaker:
             if self.state == "OPEN":
 
                 if time.monotonic() - self.opened_at < self.reset_timeout:
+
+                    CIRCUIT_BREAKER_REJECTED.labels(
+                        service=self.service_name
+                    ).inc()
+
                     raise RuntimeError("Circuit Breaker OPEN")
 
-                self.state = "HALF-OPEN"
+                self.update_state("HALF-OPEN")
                 self.half_open_test_running = False
 
             if self.state == "HALF-OPEN":
 
                 if self.half_open_test_running:
+
+                    CIRCUIT_BREAKER_REJECTED.labels(
+                        service=self.service_name
+                    ).inc()
+
                     raise RuntimeError("Circuit Breaker HALF-OPEN")
 
                 self.half_open_test_running = True
@@ -270,7 +404,8 @@ class CircuitBreaker:
 
                 if self.state == "HALF-OPEN":
 
-                    self.state = "OPEN"
+                    self.update_state("OPEN")
+
                     self.opened_at = time.monotonic()
                     self.half_open_test_running = False
 
@@ -285,7 +420,8 @@ class CircuitBreaker:
 
             if self.state == "HALF-OPEN":
 
-                self.state = "CLOSED"
+                self.update_state("CLOSED")
+
                 self.results.clear()
                 self.half_open_test_running = False
 
@@ -301,17 +437,61 @@ class CircuitBreaker:
         if len(self.results) < self.minimum_requests:
             return
 
-        failures = sum(not result for result in self.results)
+        failures = sum(
+            not result for result in self.results
+        )
 
         failure_rate = failures / len(self.results)
 
         if failure_rate >= self.failure_threshold:
 
-            self.state = "OPEN"
+            self.update_state("OPEN")
             self.opened_at = time.monotonic()
 
-
 payment_breaker = CircuitBreaker()
+
+#c'est une pour la test
+
+# @app.route("/test/circuit-breaker", methods=["POST"])
+
+# def test_circuit_breaker():
+#     # Route de test désactivée par défaut
+#     if os.getenv("ENABLE_CB_TEST", "false").lower() != "true":
+#         return jsonify({"error": "Test route disabled"}), 404
+
+#     # Vérification du jeton secret
+#     expected_token = os.getenv("CB_TEST_TOKEN")
+#     provided_token = request.headers.get("X-CB-Test-Token")
+
+#     if not expected_token or provided_token != expected_token:
+#         return jsonify({"error": "Unauthorized"}), 401
+
+#     data = request.get_json(silent=True) or {}
+#     mode = data.get("mode")
+
+#     if mode not in ["success", "fail"]:
+#         return jsonify({
+#             "error": "mode must be success or fail"
+#         }), 400
+
+#     def simulated_payment():
+#         if mode == "fail":
+#             raise RuntimeError("Simulated payment failure")
+#         return {"status": "success"}
+
+#     try:
+#         result = payment_breaker.call(simulated_payment)
+#         return jsonify({
+#             "result": result,
+#             "circuit_breaker_state": payment_breaker.state
+#         }), 200
+
+#     except Exception as error:
+#         return jsonify({
+#             "error": str(error),
+#             "circuit_breaker_state": payment_breaker.state
+#         }), 503
+
 
 def get_customer_with_fallback(customer_id):
 
@@ -339,6 +519,12 @@ def get_customer_with_fallback(customer_id):
         customer = customer_cache.get(customer_id)
 
         if customer is not None:
+
+            # Count fallback usage
+            FALLBACK_TOTAL.labels(
+                service="customer-service"
+            ).inc()
+
             logger.warning(
                 "Using cached customer data",
                 extra={
@@ -346,6 +532,7 @@ def get_customer_with_fallback(customer_id):
                     "customer_id": customer_id
                 }
             )
+
             return customer
 
         raise
