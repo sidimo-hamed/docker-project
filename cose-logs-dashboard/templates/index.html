@@ -6,13 +6,14 @@
 <title>Logs Monitoring</title>
 
 <style>
+
 :root {
-    --bg: #171a21;
-    --panel: #222630;
-    --border: #343a46;
-    --text: #eeeeee;
-    --muted: #a0a6b2;
-    --accent: #5685d8;
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --border: #e5e7eb;
+    --text: #374151;
+    --muted: #6b7280;
+    --accent: #4779b8;
 }
 
 * {
@@ -29,6 +30,7 @@ body {
 
 header {
     padding: 20px 30px;
+    background: #ffffff;
     border-bottom: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
@@ -38,6 +40,7 @@ header {
 h1 {
     margin: 0;
     font-size: 22px;
+    color: #273449;
 }
 
 .muted {
@@ -75,6 +78,7 @@ main {
     font-size: 27px;
     font-weight: bold;
     margin-top: 10px;
+    color: #273449;
 }
 
 .filters {
@@ -90,25 +94,30 @@ input, select, button {
     padding: 10px;
     border: 1px solid var(--border);
     border-radius: 6px;
-    background: #191d26;
+    background: #ffffff;
     color: var(--text);
     font-size: 14px;
 }
 
 button {
     background: var(--accent);
+    color: white;
     border-color: var(--accent);
     cursor: pointer;
-    font-weight: bold;
 }
 
 button:hover {
-    opacity: 0.85;
+    background: #35669f;
 }
 
 .secondary {
-    background: #343a46;
-    border-color: #343a46;
+    background: #ffffff;
+    color: #374151;
+    border-color: var(--border);
+}
+
+.secondary:hover {
+    background: #f0f1f3;
 }
 
 .toolbar {
@@ -137,12 +146,12 @@ th, td {
 }
 
 th {
-    color: var(--muted);
-    background: #252a35;
+    color: #4b5563;
+    background: #f9fafb;
 }
 
 tr:hover td {
-    background: #292e39;
+    background: #f8fafc;
 }
 
 .msg {
@@ -154,20 +163,35 @@ tr:hover td {
     display: inline-block;
     padding: 4px 8px;
     border-radius: 4px;
-    background: #343a46;
+    background: #f3f4f6;
     font-size: 12px;
     font-weight: bold;
 }
 
-.ERROR { color: #ff9292; }
-.WARN { color: #e6c77a; }
-.INFO { color: #b8c8df; }
-.DEBUG { color: #a9b0bd; }
+.INFO {
+    color: #374151;
+    background: #f3f4f6;
+}
+
+.WARN {
+    color: #8a641d;
+    background: #fff8e7;
+}
+
+.ERROR {
+    color: #a33b3b;
+    background: #fff0f0;
+}
+
+.DEBUG {
+    color: #4779b8;
+    background: #edf4fc;
+}
 
 .link {
     background: none;
     border: none;
-    color: #8eafe8;
+    color: var(--accent);
     padding: 0;
     cursor: pointer;
 }
@@ -179,26 +203,26 @@ tr:hover td {
 }
 
 .err {
-    color: #ff9292;
+    color: #a33b3b;
 }
 
 dialog {
     width: min(850px, 94vw);
     max-height: 85vh;
-    background: var(--panel);
+    background: white;
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: 8px;
 }
 
 dialog::backdrop {
-    background: rgba(0,0,0,0.7);
+    background: rgba(0,0,0,0.4);
 }
 
 pre {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-    background: #191d26;
+    background: #f5f6f8;
     padding: 15px;
     border-radius: 6px;
 }
@@ -226,6 +250,7 @@ pre {
         padding: 16px;
     }
 }
+
 </style>
 </head>
 
