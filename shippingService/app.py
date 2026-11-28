@@ -135,6 +135,19 @@ def home():
 
 
 # ==========================================
+# HEALTH CHECK
+# ==========================================
+
+@app.route("/health", methods=["GET"])
+def health():
+
+    return jsonify({
+        "service": "shipping-service",
+        "status": "healthy"
+    }), 200
+
+
+# ==========================================
 # CREATE SHIPMENT
 # ==========================================
 

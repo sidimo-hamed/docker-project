@@ -1,0 +1,424 @@
+# ==========================================================
+# DNS DYNAMIQUE DOCKER
+# ==========================================================
+
+resolver 127.0.0.11 valid=10s ipv6=off;
+
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+
+
+# ==========================================================
+# UPSTREAMS
+# ==========================================================
+
+upstream order_backend {
+    zone order_backend 64k;
+    server order-service:5000 resolve;
+}
+
+upstream customer_backend {
+    zone customer_backend 64k;
+    server customer-service:5002 resolve;
+}
+
+upstream inventory_backend {
+    zone inventory_backend 64k;
+    server inventory-service:5001 resolve;
+}
+
+upstream auth_backend {
+    zone auth_backend 64k;
+    server auth-service:5006 resolve;
+}
+
+# Payment Service
+upstream payment_backend {
+    zone payment_backend 64k;
+    server payment-service:5003 resolve;
+}
+
+# Shipping Service
+upstream shipping_backend {
+    zone shipping_backend 64k;
+    server shipping-service:5004 resolve;
+}
+
+
+# ==========================================================
+# SERVER
+# ==========================================================
+
+server {
+    listen 80;
+    server_name localhost;
+
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log warn;
+
+
+    # ======================================================
+    # CORS ET REQUÊTES PREFLIGHT
+    # ======================================================
+
+    location /api/ {
+        if ($request_method = OPTIONS) {
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+            add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Correlation-ID" always;
+            return 204;
+        }
+
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Correlation-ID" always;
+    }
+
+
+    # ======================================================
+    # AUTH SERVICE - VERIFICATION JWT INTERNE
+    # ======================================================
+
+    location = /_auth_check {
+        internal;
+
+        proxy_pass http://auth_backend/auth/verify;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header X-Original-URI $request_uri;
+        proxy_set_header X-Original-Method $request_method;
+    }
+
+
+    # ======================================================
+    # AUTH SERVICE - LOGIN
+    # ======================================================
+
+    location = /auth/login {
+        proxy_pass http://auth_backend/auth/login;
+
+        proxy_set_header Host $host;
+        proxy_set_header Content-Type $content_type;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+
+    # ======================================================
+    # ORDER SERVICE - LISTE DES COMMANDES
+    # ======================================================
+
+    location = /api/orders {
+        limit_req zone=api_limit burst=20 nodelay;
+
+        auth_request /_auth_check;
+
+        auth_request_set $auth_user
+            $upstream_http_x_auth_request_user;
+
+        auth_request_set $auth_role
+            $upstream_http_x_auth_request_role;
+
+        auth_request_set $auth_user_id
+            $upstream_http_x_auth_request_user_id;
+
+        proxy_pass http://order_backend/orders;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_set_header X-Authenticated-User $auth_user;
+        proxy_set_header X-Authenticated-Role $auth_role;
+        proxy_set_header X-Authenticated-User-Id $auth_user_id;
+    }
+
+
+    # ======================================================
+    # ORDER SERVICE - LISTE AVEC SLASH FINAL
+    # ======================================================
+
+    location = /api/orders/ {
+        limit_req zone=api_limit burst=20 nodelay;
+
+        auth_request /_auth_check;
+
+        auth_request_set $auth_user
+            $upstream_http_x_auth_request_user;
+
+        auth_request_set $auth_role
+            $upstream_http_x_auth_request_role;
+
+        auth_request_set $auth_user_id
+            $upstream_http_x_auth_request_user_id;
+
+        proxy_pass http://order_backend/orders;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_set_header X-Authenticated-User $auth_user;
+        proxy_set_header X-Authenticated-Role $auth_role;
+        proxy_set_header X-Authenticated-User-Id $auth_user_id;
+    }
+
+
+    # ======================================================
+    # ORDER SERVICE - SOUS-ROUTES
+    # ======================================================
+
+    location /api/orders/ {
+        limit_req zone=api_limit burst=20 nodelay;
+
+        auth_request /_auth_check;
+
+        auth_request_set $auth_user
+            $upstream_http_x_auth_request_user;
+
+        auth_request_set $auth_role
+            $upstream_http_x_auth_request_role;
+
+        auth_request_set $auth_user_id
+            $upstream_http_x_auth_request_user_id;
+
+        proxy_pass http://order_backend/orders/;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_set_header X-Authenticated-User $auth_user;
+        proxy_set_header X-Authenticated-Role $auth_role;
+        proxy_set_header X-Authenticated-User-Id $auth_user_id;
+    }
+
+
+    # ======================================================
+    # ORDER SERVICE - CHECKOUT
+    # ======================================================
+
+    location = /api/checkout {
+        limit_req zone=api_limit burst=20 nodelay;
+
+        auth_request /_auth_check;
+
+        auth_request_set $auth_user
+            $upstream_http_x_auth_request_user;
+
+        auth_request_set $auth_role
+            $upstream_http_x_auth_request_role;
+
+        auth_request_set $auth_user_id
+            $upstream_http_x_auth_request_user_id;
+
+        proxy_pass http://order_backend/checkout;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_set_header X-Authenticated-User $auth_user;
+        proxy_set_header X-Authenticated-Role $auth_role;
+        proxy_set_header X-Authenticated-User-Id $auth_user_id;
+    }
+
+
+    # ======================================================
+    # CUSTOMER SERVICE - LISTE DES CLIENTS
+    # ======================================================
+
+    location = /api/customers {
+        limit_req zone=api_limit burst=20 nodelay;
+
+        proxy_pass http://customer_backend/customers;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+
+    # ======================================================
+    # CUSTOMER SERVICE - SOUS-ROUTES
+    # ======================================================
+
+    location /api/customers/ {
+        limit_req zone=api_limit burst=20 nodelay;
+
+        proxy_pass http://customer_backend/;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+
+    # ======================================================
+    # INVENTORY SERVICE - LISTE DES PRODUITS
+    # ======================================================
+
+    location = /api/products {
+        limit_req zone=api_limit burst=20 nodelay;
+
+        proxy_pass http://inventory_backend/products;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_xforwarded_for;
+    }
+
+
+    # ======================================================
+    # INVENTORY SERVICE - SOUS-ROUTES DES PRODUITS
+    # ======================================================
+
+    location /api/products/ {
+        limit_req zone=api_limit burst=20 nodelay;
+
+        proxy_pass http://inventory_backend/products/;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_xforwarded_for;
+    }
+
+
+    # ======================================================
+    # PAYMENT SERVICE - CREATE PAYMENT
+    # ======================================================
+
+    location = /api/payments {
+        limit_req zone=api_limit burst=20 nodelay;
+
+        proxy_pass http://payment_backend/payments;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_xforwarded_for;
+        proxy_set_header X-Correlation-ID $http_x_correlation_id;
+    }
+
+
+    # ======================================================
+    # PAYMENT SERVICE - HEALTH CHECK
+    # ======================================================
+
+    location = /api/payment/health {
+        proxy_pass http://payment_backend/health;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_xforwarded_for;
+    }
+
+
+    # ======================================================
+    # PAYMENT SERVICE - PROMETHEUS METRICS
+    # ======================================================
+
+    location = /api/payment/metrics {
+        proxy_pass http://payment_backend/metrics;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_xforwarded_for;
+    }
+
+
+    # ======================================================
+    # PAYMENT SERVICE - HOME
+    # ======================================================
+
+    location = /api/payment {
+        proxy_pass http://payment_backend/;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_xforwarded_for;
+    }
+
+
+    # ======================================================
+    # SHIPPING SERVICE - CREATE SHIPMENT
+    # ======================================================
+
+    location = /api/shipments {
+        limit_req zone=api_limit burst=20 nodelay;
+
+        proxy_pass http://shipping_backend/shipments;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_xforwarded_for;
+        proxy_set_header X-Correlation-ID $http_x_correlation_id;
+    }
+
+
+    # ======================================================
+    # SHIPPING SERVICE - SHIPMENT SUB-ROUTES
+    # ======================================================
+
+    location /api/shipments/ {
+        limit_req zone=api_limit burst=20 nodelay;
+
+        proxy_pass http://shipping_backend/shipments/;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_xforwarded_for;
+        proxy_set_header X-Correlation-ID $http_x_correlation_id;
+    }
+
+
+    # ======================================================
+    # SHIPPING SERVICE - HEALTH CHECK
+    # ======================================================
+
+    location = /api/shipping/health {
+        proxy_pass http://shipping_backend/health;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+
+    # ======================================================
+    # SHIPPING SERVICE - PROMETHEUS METRICS
+    # ======================================================
+
+    location = /api/shipping/metrics {
+        proxy_pass http://shipping_backend/metrics;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_xforwarded_for;
+    }
+
+
+    # ======================================================
+    # SHIPPING SERVICE - HOME
+    # ======================================================
+
+    location = /api/shipping {
+        proxy_pass http://shipping_backend/;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_xforwarded_for;
+    }
+
+
+    # ======================================================
+    # ORDER SERVICE - HEALTH CHECK
+    # ======================================================
+
+    location = /api/health {
+        proxy_pass http://order_backend/health;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+}
